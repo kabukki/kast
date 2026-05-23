@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Fragment, useMemo, useState } from 'react'
+import { Calculator, CalendarSync } from 'lucide-react'
 
 export const Route = createFileRoute('/')({ component: TaxCalculator })
 
@@ -60,9 +61,36 @@ function ColTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
+type Status = 'public' | 'etam' | 'cadre' | 'liberal'
+
+const STATUS_DEDUCTION: Record<Status, number> = {
+  public: 0.17,
+  etam: 0.22,
+  cadre: 0.25,
+  liberal: 0.34,
+}
+
+const STATUS_LABEL: Record<Status, string> = {
+  public: 'Public',
+  etam: 'ETAM',
+  cadre: 'Cadre',
+  liberal: 'Libéral',
+}
+
 function TaxCalculator() {
-  const [net, setNet] = useState(40000)
+  const [gross, setGross] = useState(50000)
+  const [net, setNet] = useState(50000 * (1 - STATUS_DEDUCTION.cadre))
+  const [status, setStatus] = useState<Status>('cadre')
   const [pas, setPas] = useState(8)
+
+  const updateGross = (g: number) => {
+    setGross(g)
+    setNet(g * (1 - STATUS_DEDUCTION[status]))
+  }
+  const updateStatus = (s: Status) => {
+    setStatus(s)
+    setNet(gross * (1 - STATUS_DEDUCTION[s]))
+  }
 
   const rows = useMemo(() => computeBrackets(Math.max(0, net)), [net])
   const total = useMemo(() => rows.reduce((s, r) => s + r.tax, 0), [rows])
@@ -161,51 +189,120 @@ function TaxCalculator() {
         <span className="font-display text-[34px] leading-none font-semibold tracking-[-0.04em] lowercase">
           kast
         </span>
-        <span className="text-[11px] tracking-[0.18em] uppercase text-ink-soft font-medium">
-          fiscal
-        </span>
       </a>
-      <h1 className="text-2xl font-medium m-0 mb-1 tracking-[-0.01em]">
-        Calculateur d'impôt sur le revenu
-      </h1>
-      <p className="text-ink-muted text-[14px] m-0 mb-8">
-        Barème 2026 sur les revenus 2025 — pour une part fiscale
-      </p>
+      {/* User inputs — single source of truth at the top */}
+      <div className="mb-10 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+        <div>
+          <label
+            htmlFor="gross-input"
+            className="block mb-2.5 text-[13px] text-ink-muted font-medium uppercase tracking-[0.04em]"
+          >
+            Annuel brut
+          </label>
+          <div className="relative">
+            <input
+              type="number"
+              id="gross-input"
+              value={Math.round(gross)}
+              min={0}
+              step={1000}
+              onChange={(e) => updateGross(parseFloat(e.target.value) || 0)}
+              className="w-full py-2.5 pl-3.5 pr-9 text-lg font-medium border border-cream-border-strong rounded-app bg-cream-surface text-ink transition-[border-color,box-shadow] focus:outline-none focus:border-clay focus:shadow-[0_0_0_3px_var(--color-clay-soft)]"
+            />
+            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-ink-muted pointer-events-none">
+              €
+            </span>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(260px,1fr)_minmax(420px,2fr)_minmax(280px,1.1fr)] gap-4 items-start mb-7">
-        {/* Left column — input */}
-        <div className="min-w-0">
-          <ColTitle>Revenu net imposable</ColTitle>
-          <div className="bg-cream-surface border border-cream-border rounded-app-lg px-6 py-5 shadow-app">
-            <div className="flex flex-col items-stretch gap-3">
-              <input
-                type="number"
-                id="net-input"
-                value={net}
-                min={0}
-                step={1000}
-                onChange={(e) => setNet(parseFloat(e.target.value) || 0)}
-                className="w-full py-2.5 px-3.5 text-lg font-medium border border-cream-border-strong rounded-app bg-cream-surface text-ink transition-[border-color,box-shadow] focus:outline-none focus:border-clay focus:shadow-[0_0_0_3px_var(--color-clay-soft)]"
-              />
-              <input
-                type="range"
-                min={0}
-                max={250000}
-                value={Math.min(net, 250000)}
-                step={500}
-                onChange={(e) => setNet(parseFloat(e.target.value) || 0)}
-                className="!min-w-0 w-full"
-              />
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="text-[13px] text-ink-muted font-medium uppercase tracking-[0.04em]">
+              Statut
             </div>
+            <InfoIcon>
+              <div className="font-semibold mb-1.5 text-white">
+                Abattement forfaitaire
+              </div>
+              {(['public', 'etam', 'cadre', 'liberal'] as Status[]).map(
+                (s) => (
+                  <div
+                    key={s}
+                    className="flex justify-between gap-3 py-0.5 text-[#d1cfc4]"
+                  >
+                    <span>{STATUS_LABEL[s]}</span>
+                    <strong className="text-white font-medium tabular-nums">
+                      −{Math.round(STATUS_DEDUCTION[s] * 100)} %
+                    </strong>
+                  </div>
+                ),
+              )}
+            </InfoIcon>
+          </div>
+          <div
+            role="radiogroup"
+            aria-label="Statut"
+            className="grid grid-cols-4 bg-cream-alt rounded-app p-1 gap-1"
+          >
+            {(['public', 'etam', 'cadre', 'liberal'] as Status[]).map((s) => {
+              const active = status === s
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => updateStatus(s)}
+                  className={`text-xs font-medium uppercase tracking-[0.06em] py-3.5 rounded-md transition-colors ${
+                    active
+                      ? 'bg-cream-surface text-ink shadow-app'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  {STATUS_LABEL[s]}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2.5 mb-8">
+        <Calculator
+          className="text-clay shrink-0"
+          size={24}
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
+        <div>
+          <h1 className="text-2xl font-medium m-0 tracking-[-0.01em] leading-tight">
+            Impôt sur le revenu
+          </h1>
+          <p className="text-ink-muted text-[14px] m-0">
+            Barème 2026 sur les revenus 2025 — pour une part fiscale
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-6 mb-7">
+        {/* Net imposable — derived, read-only */}
+        <div className="min-w-0">
+          <ColTitle>Net imposable</ColTitle>
+          <div className="w-fit mx-auto text-2xl font-medium tabular-nums tracking-[-0.01em] text-ink">
+            {fmt(net)}
           </div>
         </div>
 
         {/* Middle column — breakdown */}
         <div className="min-w-0">
           <ColTitle>Répartition par tranche</ColTitle>
-          <div role="group" aria-label="Revenu par tranche" className="flex flex-col">
+          <div
+            role="group"
+            aria-label="Revenu par tranche"
+            className="flex items-stretch"
+          >
             {grossSegments.length === 0 && (
-              <div className="bg-cream-surface border border-cream-border rounded-app p-[18px] text-center text-ink-soft">
+              <div className="w-full bg-cream-surface border border-cream-border rounded-app p-[18px] text-center text-ink-soft">
                 —
               </div>
             )}
@@ -222,13 +319,14 @@ function TaxCalculator() {
                   {i > 0 && (
                     <div
                       aria-hidden="true"
-                      className="text-center text-ink-soft text-lg py-1.5 select-none font-mono"
+                      className="flex items-center justify-center text-ink-soft text-lg px-2 select-none font-mono shrink-0"
                     >
                       +
                     </div>
                   )}
                   <div
-                    className="bracket-card relative bg-cream-surface border border-cream-border rounded-app overflow-hidden shadow-app"
+                    className="bracket-card relative bg-cream-surface border border-cream-border rounded-app overflow-hidden shadow-app flex-1 min-w-0"
+                    style={{ flexGrow: Math.max(seg.amount, 1) }}
                   >
                     <div
                       className="flex items-baseline justify-between gap-2 px-3 py-2 text-white"
@@ -300,58 +398,69 @@ function TaxCalculator() {
           </div>
         </div>
 
-        {/* Right column — forecast */}
+        {/* Forecast row */}
         <div className="min-w-0">
-          <ColTitle>Forecast</ColTitle>
-          <ResultCard
-            label="Net après impôt"
-            amount={fmt(net - total)}
-            amountTone="sage"
-            tooltip={
-              <>
-                Revenu net imposable − impôt total. Ce qu'il vous reste
-                effectivement une fois l'impôt sur le revenu acquitté (hors
-                autres prélèvements sociaux).
-              </>
-            }
-          />
-          <ResultCard
-            label="Impôt total"
-            amount={fmt(total)}
-            amountTone="rust"
-            tooltip={
-              <>
-                Somme des impôts dus dans chaque tranche du barème
-                progressif. C'est le montant final à payer au Trésor public
-                sur vos revenus de l'année.
-              </>
-            }
-          />
-          <ResultCard
-            label="Taux marginal"
-            amount={`${marg.toFixed(0)} %`}
-            tooltip={
-              <>
-                Taux appliqué à votre dernier euro gagné — c'est-à-dire la
-                tranche la plus haute que vous atteignez. Indique ce que
-                coûterait en impôt 1 € de revenu supplémentaire.
-              </>
-            }
-          />
+          <ColTitle>Prévision</ColTitle>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <ResultCard
+              label="Net après impôt"
+              amount={fmt(net - total)}
+              amountTone="sage"
+              tooltip={
+                <>
+                  Ce qu'il vous reste sur le net imposable après avoir payé
+                  l'impôt sur le revenu.
+                </>
+              }
+            />
+            <ResultCard
+              label="Impôt total"
+              amount={fmt(total)}
+              amountTone="rust"
+              tooltip={
+                <>
+                  Somme des impôts dus dans chaque tranche du barème
+                  progressif. C'est le montant final à payer au Trésor public
+                  sur vos revenus de l'année.
+                </>
+              }
+            />
+            <ResultCard
+              label="Taux marginal"
+              amount={`${marg.toFixed(0)} %`}
+              tooltip={
+                <>
+                  Taux appliqué à votre dernier euro gagné — c'est-à-dire la
+                  tranche la plus haute que vous atteignez. Indique ce que
+                  coûterait en impôt 1 € de revenu supplémentaire.
+                </>
+              }
+            />
+          </div>
         </div>
       </div>
 
-      <div className="h-px bg-cream-border my-10" />
 
       <div className="mb-6">
-        <h2 className="text-lg font-medium m-0 mb-1.5 tracking-[-0.01em]">
-          Simuler le prélèvement à la source
-        </h2>
-        <p className="text-[13px] text-ink-muted m-0 mb-5 leading-[1.6]">
-          L'administration applique chaque mois un taux à votre salaire pour
-          anticiper l'impôt. Si ce taux ne correspond pas à votre situation
-          réelle, un solde de régularisation apparaît en fin d'année.
-        </p>
+        <div className="flex items-center gap-2.5 mb-8">
+          <CalendarSync
+            className="text-clay shrink-0"
+            size={24}
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
+          <div>
+            <h2 className="text-2xl font-medium m-0 tracking-[-0.01em] leading-tight">
+              Prélèvement à la source
+            </h2>
+            <p className="text-ink-muted text-[14px] m-0">
+              L'administration applique chaque mois un taux à votre salaire
+              pour anticiper l'impôt. Si ce taux ne correspond pas à votre
+              situation réelle, un solde de régularisation apparaît en fin
+              d'année.
+            </p>
+          </div>
+        </div>
 
         <div className="bg-cream-surface border border-cream-border rounded-app-lg px-6 py-5 mb-6 shadow-app">
           <div className="flex justify-between items-center mb-2.5 gap-3 flex-wrap">
@@ -474,7 +583,7 @@ function ResultCard({
         ? 'text-rust'
         : ''
   return (
-    <div className="bg-cream-surface border border-cream-border rounded-app px-4 py-3.5 shadow-app flex flex-col gap-1.5 mt-3 first:mt-0">
+    <div className="bg-cream-surface border border-cream-border rounded-app px-4 py-3.5 shadow-app flex flex-col gap-1.5">
       <span className="inline-flex items-center gap-1.5 text-xs font-medium tracking-[0.04em] uppercase text-ink-muted">
         {label}
         <InfoIcon>{tooltip}</InfoIcon>
