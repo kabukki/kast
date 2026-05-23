@@ -1,18 +1,15 @@
 # 🔮 kast
 
-French income tax calculator
+Demystifying personal finance
 
 ## Develop
 
 ```sh
 npm install
 npm run dev
-```
-
-## Deploy
-
-```sh
 npm run deploy
 ```
 
-Requires `wrangler login` (or `CLOUDFLARE_API_TOKEN` in the environment) once.
+## Credits
+
+- https://simulateur-ir-ifi.impots.gouv.fr/calcul_impot/2026/
