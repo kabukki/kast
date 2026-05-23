@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Fragment, useMemo, useState } from 'react'
-import { ArrowRight, Calculator, CalendarSync } from 'lucide-react'
+import { ArrowRight, Calculator, CalendarSync, Wallet } from 'lucide-react'
+import NumberFlow from '@number-flow/react'
 
 export const Route = createFileRoute('/')({ component: TaxCalculator })
 
@@ -27,6 +28,48 @@ const BRACKETS: ReadonlyArray<Bracket> = [
 ]
 
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR') + ' €'
+
+const EUR_FORMAT = {
+  style: 'currency',
+  currency: 'EUR',
+  maximumFractionDigits: 0,
+} as const
+
+function Money({
+  value,
+  signed = false,
+}: {
+  value: number
+  signed?: boolean
+}) {
+  return (
+    <NumberFlow
+      value={Math.round(value)}
+      locales="fr-FR"
+      format={signed ? { ...EUR_FORMAT, signDisplay: 'always' } : EUR_FORMAT}
+    />
+  )
+}
+
+function Percent({
+  value,
+  fractionDigits = 0,
+}: {
+  value: number
+  fractionDigits?: number
+}) {
+  return (
+    <NumberFlow
+      value={value / 100}
+      locales="fr-FR"
+      format={{
+        style: 'percent',
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits,
+      }}
+    />
+  )
+}
 
 function computeBrackets(net: number) {
   return BRACKETS.map((b) => {
@@ -77,6 +120,8 @@ function defaultPas(net: number) {
   return Math.round((net > 0 ? (total / net) * 1000 : 0)) / 10
 }
 
+type Period = 'month' | 'year'
+
 function TaxCalculator() {
   const [gross, setGross] = useState(50000)
   const [net, setNet] = useState(50000 * (1 - STATUS_DEDUCTION.cadre))
@@ -84,6 +129,7 @@ function TaxCalculator() {
   const [pas, setPas] = useState(() =>
     defaultPas(50000 * (1 - STATUS_DEDUCTION.cadre)),
   )
+  const [netPeriod, setNetPeriod] = useState<Period>('month')
 
   const updateGross = (g: number) => {
     setGross(g)
@@ -104,19 +150,16 @@ function TaxCalculator() {
 
   let gapTone: 'balanced' | 'refund' | 'due' = 'balanced'
   let gapLabel = 'Solde équilibré'
-  let gapAmount = '0 €'
   let gapSentence = "Votre taux PAS correspond exactement à l'impôt dû."
   if (Math.abs(diff) >= 1) {
     if (diff > 0) {
       gapTone = 'refund'
       gapLabel = 'Remboursement attendu'
-      gapAmount = '+ ' + fmt(diff)
       gapSentence =
         "Le fisc vous remboursera ce trop-perçu en fin d'année."
     } else {
       gapTone = 'due'
       gapLabel = 'Solde à payer'
-      gapAmount = '− ' + fmt(-diff)
       gapSentence =
         "Vous devrez régler ce complément en fin d'année."
     }
@@ -155,14 +198,14 @@ function TaxCalculator() {
           </span>
           <span
             aria-hidden="true"
-            className="ml-0.5 inline-block w-1.5 h-1.5 rounded-full bg-ink-soft"
+            className="ml-0.5 inline-block w-1.5 h-1.5 rounded-full bg-ink"
           />
         </a>
         <button
           type="button"
           aria-label="Pays : France"
           title="France"
-          className="inline-flex items-center gap-2 py-1.5 pl-2 pr-3 rounded-full bg-cream-surface border border-cream-border shadow-app text-[12px] font-medium tracking-[0.04em] uppercase text-ink-muted hover:text-ink transition-colors cursor-default"
+          className="inline-flex items-center gap-2 py-1.5 pl-2 pr-3 rounded-full bg-cream-surface border border-cream-border shadow-app text-[12px] font-medium tracking-[0.04em] text-ink-muted hover:text-ink transition-colors cursor-default"
         >
           <span className="text-base leading-none" aria-hidden="true">
             🇫🇷
@@ -177,7 +220,7 @@ function TaxCalculator() {
             htmlFor="gross-input"
             className="inline-flex items-center gap-1.5 mb-2.5 text-[13px] text-ink-muted font-medium uppercase tracking-[0.04em]"
           >
-            Annuel brut
+            Revenu annuel brut
             <InfoIcon>
               Votre rémunération annuelle avant cotisations sociales et impôt.
               Inclut salaire de base, primes et avantages imposables.
@@ -278,7 +321,7 @@ function TaxCalculator() {
             </InfoIcon>
           </div>
           <div className="w-fit mx-auto text-2xl font-medium tabular-nums tracking-[-0.01em] text-ink">
-            {fmt(net)}
+            <Money value={net} />
           </div>
         </div>
 
@@ -316,6 +359,14 @@ function TaxCalculator() {
               const lower = seg.min.toLocaleString('fr-FR') + ' €'
               const taxPct = seg.label ? parseInt(seg.label, 10) : 0
               const keptAmount = seg.amount - seg.tax
+              const capacity =
+                seg.max === Number.POSITIVE_INFINITY
+                  ? seg.amount
+                  : seg.max - seg.min
+              const fillPct =
+                capacity > 0
+                  ? Math.min(100, (seg.amount / capacity) * 100)
+                  : 0
               return (
                 <Fragment key={seg.key}>
                   {i > 0 && (
@@ -330,13 +381,18 @@ function TaxCalculator() {
                     className="bracket-card relative bg-cream-surface border border-cream-border rounded-app overflow-hidden shadow-app"
                   >
                     <div
-                      className="flex items-baseline justify-between gap-2 px-3 py-2 text-white"
-                      style={{ background: seg.color }}
+                      className="bracket-header relative flex items-baseline justify-between gap-2 px-3 py-2 text-white overflow-hidden"
+                      style={{ background: `color-mix(in srgb, ${seg.color} 22%, transparent)` }}
                     >
-                      <span className="text-sm font-semibold tabular-nums tracking-[-0.01em]">
+                      <div
+                        aria-hidden="true"
+                        className="bracket-header-fill absolute inset-y-0 left-0"
+                        style={{ background: seg.color, width: `${fillPct}%` }}
+                      />
+                      <span className="relative text-sm font-semibold tabular-nums tracking-[-0.01em]">
                         {fmt(seg.amount)}
                       </span>
-                      <span className="text-[10px] font-semibold tracking-[0.06em] uppercase opacity-85 whitespace-nowrap">
+                      <span className="relative text-[10px] font-semibold tracking-[0.06em] uppercase opacity-85 whitespace-nowrap">
                         {seg.label}
                       </span>
                     </div>
@@ -410,18 +466,26 @@ function TaxCalculator() {
         <div className="min-w-0 flex flex-col gap-3">
             <ResultCard
               label="Net après impôt"
-              amount={fmt(net - total)}
+              amount={
+                <span className="flex items-center justify-between gap-3 w-full">
+                  <Money
+                    value={
+                      netPeriod === 'month'
+                        ? (net - total) / 12
+                        : net - total
+                    }
+                  />
+                  <PeriodPicker value={netPeriod} onChange={setNetPeriod} />
+                </span>
+              }
               amountTone="sage"
               tooltip={
-                <>
-                  Ce qu'il vous reste sur le net imposable après avoir payé
-                  l'impôt sur le revenu.
-                </>
+                <>Ce que vous recevez réellement sur votre compte.</>
               }
             />
             <ResultCard
               label="Impôt total"
-              amount={fmt(total)}
+              amount={<Money value={total} />}
               amountTone="rust"
               tooltip={
                 <>
@@ -433,7 +497,7 @@ function TaxCalculator() {
             />
             <ResultCard
               label="Taux marginal"
-              amount={`${marg.toFixed(0)} %`}
+              amount={<Percent value={marg} />}
               tooltip={
                 <>
                   Taux appliqué à votre dernier euro gagné — c'est-à-dire la
@@ -476,7 +540,7 @@ function TaxCalculator() {
             </InfoIcon>
           </div>
           <div className="w-fit mx-auto text-2xl font-medium tabular-nums tracking-[-0.01em] text-ink">
-            {avg.toFixed(2)} %
+            <Percent value={avg} fractionDigits={2} />
           </div>
         </div>
 
@@ -518,12 +582,75 @@ function TaxCalculator() {
             <div
               className={`text-[28px] font-medium tracking-[-0.01em] tabular-nums mb-1 ${gapColor}`}
             >
-              {gapAmount}
+              {gapTone === 'balanced' ? (
+                <Money value={0} />
+              ) : (
+                <Money value={diff} signed />
+              )}
             </div>
             <p className="text-[13px] text-ink-muted leading-[1.5] m-0">
               {gapSentence}
             </p>
           </div>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <div className="flex items-center gap-2.5 mb-8">
+          <Wallet
+            className="text-clay shrink-0"
+            size={24}
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
+          <div>
+            <h2 className="text-2xl font-medium m-0 tracking-[-0.01em] leading-tight">
+              Pouvoir d'achat
+            </h2>
+            <p className="text-ink-muted text-[14px] m-0">
+              Repères mensuels calculés sur votre net après impôt — utiles
+              pour cadrer un loyer ou une mensualité de crédit.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <BenchmarkCard
+            label="Loyer max conseillé"
+            amount={<Money value={((net - total) / 12) * 0.33} />}
+            rule="≈ 1/3 du net"
+            tooltip={
+              <>
+                Règle du taux d'effort retenue par la plupart des bailleurs :
+                le loyer charges comprises ne devrait pas dépasser un tiers
+                de votre revenu mensuel net.
+              </>
+            }
+          />
+          <BenchmarkCard
+            label="Mensualité de crédit max"
+            amount={<Money value={((net - total) / 12) * 0.35} />}
+            rule="≤ 35 % du net"
+            tooltip={
+              <>
+                Taux d'endettement maximum fixé par le HCSF pour les prêts
+                immobiliers : la somme de toutes vos mensualités de crédit
+                (assurance incluse) ne doit pas dépasser 35 % de votre
+                revenu mensuel net.
+              </>
+            }
+          />
+          <BenchmarkCard
+            label="Capacité d'épargne mensuelle"
+            amount={<Money value={((net - total) / 12) * 0.2} />}
+            rule="≈ 20 % du net"
+            tooltip={
+              <>
+                Cible recommandée par la plupart des budgets type 50/30/20 :
+                consacrer 10 à 20 % du revenu net à l'épargne.
+              </>
+            }
+          />
         </div>
       </div>
 
@@ -535,6 +662,46 @@ function TaxCalculator() {
   )
 }
 
+function PeriodPicker({
+  value,
+  onChange,
+}: {
+  value: Period
+  onChange: (p: Period) => void
+}) {
+  const options: { id: Period; label: string }[] = [
+    { id: 'month', label: 'mensuel' },
+    { id: 'year', label: 'annuel' },
+  ]
+  return (
+    <span
+      role="radiogroup"
+      aria-label="Période"
+      className="inline-flex bg-cream-alt rounded-md p-0.5 gap-0.5"
+    >
+      {options.map((o) => {
+        const active = value === o.id
+        return (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(o.id)}
+            className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-[0.06em] transition-colors ${
+              active
+                ? 'bg-cream-surface text-ink shadow-app'
+                : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </span>
+  )
+}
+
 function ResultCard({
   label,
   amount,
@@ -542,7 +709,7 @@ function ResultCard({
   tooltip,
 }: {
   label: string
-  amount: string
+  amount: React.ReactNode
   amountTone?: 'sage' | 'rust'
   tooltip: React.ReactNode
 }) {
@@ -560,6 +727,35 @@ function ResultCard({
       </span>
       <span className={`text-[22px] font-medium tracking-[-0.01em] tabular-nums ${toneClass}`}>
         {amount}
+      </span>
+    </div>
+  )
+}
+
+function BenchmarkCard({
+  label,
+  amount,
+  rule,
+  tooltip,
+}: {
+  label: string
+  amount: React.ReactNode
+  rule: string
+  tooltip: React.ReactNode
+}) {
+  return (
+    <div className="bg-cream-surface border border-cream-border rounded-app px-4 py-3.5 shadow-app flex flex-col gap-1.5">
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium tracking-[0.04em] uppercase text-ink-muted">
+        {label}
+        <InfoIcon>{tooltip}</InfoIcon>
+      </span>
+      <span className="flex items-baseline justify-between gap-3">
+        <span className="text-[22px] font-medium tracking-[-0.01em] tabular-nums text-ink">
+          {amount}
+        </span>
+        <span className="text-[11px] font-medium tracking-[0.04em] uppercase text-ink-soft tabular-nums">
+          {rule}
+        </span>
       </span>
     </div>
   )

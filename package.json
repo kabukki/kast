@@ -8,6 +8,7 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@number-flow/react": "^0.6.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-router": "latest",
     "@tanstack/react-start": "latest",
