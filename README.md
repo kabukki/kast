@@ -1,8 +1,6 @@
-# kast
+# 🔮 kast
 
-Calculateur d'impôt sur le revenu — Barème 2026.
-
-TanStack Start (React, SSR) deployed to Cloudflare Workers at https://kast.le-roux.dev.
+French income tax calculator
 
 ## Develop
 
