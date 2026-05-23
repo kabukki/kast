@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Fragment, useMemo, useState } from 'react'
-import { Calculator, CalendarSync } from 'lucide-react'
+import { ArrowRight, Calculator, CalendarSync } from 'lucide-react'
 
 export const Route = createFileRoute('/')({ component: TaxCalculator })
 
@@ -53,14 +53,6 @@ function InfoIcon({ children }: { children: React.ReactNode }) {
   )
 }
 
-function ColTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-center mb-3.5 text-[12px] font-medium tracking-[0.14em] uppercase text-ink-soft">
-      {children}
-    </div>
-  )
-}
-
 type Status = 'public' | 'etam' | 'cadre' | 'liberal'
 
 const STATUS_DEDUCTION: Record<Status, number> = {
@@ -77,11 +69,21 @@ const STATUS_LABEL: Record<Status, string> = {
   liberal: 'Libéral',
 }
 
+function defaultPas(net: number) {
+  const total = computeBrackets(Math.max(0, net)).reduce(
+    (s, r) => s + r.tax,
+    0,
+  )
+  return Math.round((net > 0 ? (total / net) * 1000 : 0)) / 10
+}
+
 function TaxCalculator() {
   const [gross, setGross] = useState(50000)
   const [net, setNet] = useState(50000 * (1 - STATUS_DEDUCTION.cadre))
   const [status, setStatus] = useState<Status>('cadre')
-  const [pas, setPas] = useState(8)
+  const [pas, setPas] = useState(() =>
+    defaultPas(50000 * (1 - STATUS_DEDUCTION.cadre)),
+  )
 
   const updateGross = (g: number) => {
     setGross(g)
@@ -99,46 +101,24 @@ function TaxCalculator() {
 
   const paid = net * (pas / 100)
   const diff = paid - total
-  const maxAmount = Math.max(paid, total, 1)
 
-  let regulTone: 'balanced' | 'refund' | 'due' = 'balanced'
-  let regulLabel = 'Solde équilibré'
-  let regulAmount = '0 €'
-  let regulDetail: React.ReactNode = (
-    <>
-      Le PAS prélevé ({fmt(paid)}) correspond exactement à l'impôt dû. Aucune
-      régularisation.
-    </>
-  )
-  const barPaidWidth = `${(paid / maxAmount) * 100}%`
-  let barExtraWidth = '0%'
-  let barExtraLeft = '0%'
-
+  let gapTone: 'balanced' | 'refund' | 'due' = 'balanced'
+  let gapLabel = 'Solde équilibré'
+  let gapAmount = '0 €'
+  let gapSentence = "Votre taux PAS correspond exactement à l'impôt dû."
   if (Math.abs(diff) >= 1) {
     if (diff > 0) {
-      regulTone = 'refund'
-      regulLabel = '↓ Remboursement attendu'
-      regulAmount = '+ ' + fmt(diff)
-      regulDetail = (
-        <>
-          Vous avez payé <strong>{fmt(paid)}</strong> via le PAS pour un impôt
-          réel de <strong>{fmt(total)}</strong>. Le fisc vous rembourse la
-          différence. Votre taux moyen réel est de {avg.toFixed(2)} %.
-        </>
-      )
+      gapTone = 'refund'
+      gapLabel = 'Remboursement attendu'
+      gapAmount = '+ ' + fmt(diff)
+      gapSentence =
+        "Le fisc vous remboursera ce trop-perçu en fin d'année."
     } else {
-      regulTone = 'due'
-      regulLabel = '↑ Solde à payer'
-      regulAmount = '− ' + fmt(-diff)
-      regulDetail = (
-        <>
-          Vous avez payé <strong>{fmt(paid)}</strong> via le PAS, mais l'impôt
-          réel est de <strong>{fmt(total)}</strong>. Il vous reste à régler la
-          différence. Votre taux moyen réel est de {avg.toFixed(2)} %.
-        </>
-      )
-      barExtraWidth = `${((total - paid) / maxAmount) * 100}%`
-      barExtraLeft = `${(paid / maxAmount) * 100}%`
+      gapTone = 'due'
+      gapLabel = 'Solde à payer'
+      gapAmount = '− ' + fmt(-diff)
+      gapSentence =
+        "Vous devrez régler ce complément en fin d'année."
     }
   }
 
@@ -153,51 +133,55 @@ function TaxCalculator() {
     max: r.max,
   }))
 
-  const syncPas = () => {
-    const rounded = Math.round(avg * 10) / 10
-    setPas(rounded)
-  }
+  const gapColor =
+    gapTone === 'refund'
+      ? 'text-sage'
+      : gapTone === 'due'
+        ? 'text-rust'
+        : 'text-ink'
 
-  const regulBorder =
-    regulTone === 'refund'
-      ? 'border-l-[#2d8a5f]'
-      : regulTone === 'due'
-        ? 'border-l-[#c0392b]'
-        : 'border-l-clay'
-  const regulBg =
-    regulTone === 'refund'
-      ? 'bg-gradient-to-r from-[#ecf6f0] from-0% via-cream-surface via-40%'
-      : regulTone === 'due'
-        ? 'bg-gradient-to-r from-[#fbecea] from-0% via-cream-surface via-40%'
-        : ''
-  const regulAmountColor =
-    regulTone === 'refund'
-      ? 'text-[#2d8a5f]'
-      : regulTone === 'due'
-        ? 'text-[#c0392b]'
-        : ''
-  const regulFillColor = regulTone === 'refund' ? 'bg-[#2d8a5f]' : 'bg-clay'
-  const regulDotPaid = regulTone === 'refund' ? 'bg-[#2d8a5f]' : 'bg-clay'
+  const resetPas = () => setPas(defaultPas(net))
 
   return (
-    <div className="max-w-[1280px] mx-auto">
-      <a
-        href="/"
-        aria-label="kast"
-        className="inline-flex items-baseline gap-2 mb-6 text-ink hover:text-clay transition-colors no-underline"
-      >
-        <span className="font-display text-[34px] leading-none font-semibold tracking-[-0.04em] lowercase">
-          kast
-        </span>
-      </a>
+    <div className="container mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <a
+          href="/"
+          aria-label="kast"
+          className="inline-flex items-baseline text-clay hover:opacity-80 transition-opacity no-underline"
+        >
+          <span className="font-display text-[34px] leading-none font-semibold tracking-[-0.04em] lowercase">
+            kast
+          </span>
+          <span
+            aria-hidden="true"
+            className="ml-0.5 inline-block w-1.5 h-1.5 rounded-full bg-ink-soft"
+          />
+        </a>
+        <button
+          type="button"
+          aria-label="Pays : France"
+          title="France"
+          className="inline-flex items-center gap-2 py-1.5 pl-2 pr-3 rounded-full bg-cream-surface border border-cream-border shadow-app text-[12px] font-medium tracking-[0.04em] uppercase text-ink-muted hover:text-ink transition-colors cursor-default"
+        >
+          <span className="text-base leading-none" aria-hidden="true">
+            🇫🇷
+          </span>
+          France
+        </button>
+      </div>
       {/* User inputs — single source of truth at the top */}
       <div className="mb-10 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         <div>
           <label
             htmlFor="gross-input"
-            className="block mb-2.5 text-[13px] text-ink-muted font-medium uppercase tracking-[0.04em]"
+            className="inline-flex items-center gap-1.5 mb-2.5 text-[13px] text-ink-muted font-medium uppercase tracking-[0.04em]"
           >
             Annuel brut
+            <InfoIcon>
+              Votre rémunération annuelle avant cotisations sociales et impôt.
+              Inclut salaire de base, primes et avantages imposables.
+            </InfoIcon>
           </label>
           <div className="relative">
             <input
@@ -216,10 +200,8 @@ function TaxCalculator() {
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-2.5">
-            <div className="text-[13px] text-ink-muted font-medium uppercase tracking-[0.04em]">
-              Statut
-            </div>
+          <div className="inline-flex items-center gap-1.5 mb-2.5 text-[13px] text-ink-muted font-medium uppercase tracking-[0.04em]">
+            Statut
             <InfoIcon>
               <div className="font-semibold mb-1.5 text-white">
                 Abattement forfaitaire
@@ -284,25 +266,45 @@ function TaxCalculator() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-6 mb-7">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto_1fr] gap-4 items-center mb-7">
         {/* Net imposable — derived, read-only */}
         <div className="min-w-0">
-          <ColTitle>Net imposable</ColTitle>
+          <div className="flex items-center justify-center gap-1.5 mb-3.5 text-[12px] font-medium tracking-[0.14em] uppercase text-ink-soft">
+            Net imposable
+            <InfoIcon>
+              Salaire annuel brut auquel on retire l'abattement forfaitaire de
+              votre statut. C'est l'assiette utilisée pour calculer l'impôt
+              sur le revenu.
+            </InfoIcon>
+          </div>
           <div className="w-fit mx-auto text-2xl font-medium tabular-nums tracking-[-0.01em] text-ink">
             {fmt(net)}
           </div>
         </div>
 
+        <ArrowRight
+          aria-hidden="true"
+          className="text-ink-soft hidden md:block"
+          size={20}
+          strokeWidth={1.75}
+        />
+
         {/* Middle column — breakdown */}
         <div className="min-w-0">
-          <ColTitle>Répartition par tranche</ColTitle>
+          <div className="flex items-center justify-center gap-1.5 mb-3.5 text-[12px] font-medium tracking-[0.14em] uppercase text-ink-soft">
+            Répartition par tranche
+            <InfoIcon>
+              Le net imposable est découpé selon les tranches du barème
+              progressif. Chaque tranche est taxée à son propre taux.
+            </InfoIcon>
+          </div>
           <div
             role="group"
             aria-label="Revenu par tranche"
-            className="flex items-stretch"
+            className="flex flex-col"
           >
             {grossSegments.length === 0 && (
-              <div className="w-full bg-cream-surface border border-cream-border rounded-app p-[18px] text-center text-ink-soft">
+              <div className="bg-cream-surface border border-cream-border rounded-app p-[18px] text-center text-ink-soft">
                 —
               </div>
             )}
@@ -319,14 +321,13 @@ function TaxCalculator() {
                   {i > 0 && (
                     <div
                       aria-hidden="true"
-                      className="flex items-center justify-center text-ink-soft text-lg px-2 select-none font-mono shrink-0"
+                      className="text-center text-ink-soft text-lg select-none font-mono"
                     >
                       +
                     </div>
                   )}
                   <div
-                    className="bracket-card relative bg-cream-surface border border-cream-border rounded-app overflow-hidden shadow-app flex-1 min-w-0"
-                    style={{ flexGrow: Math.max(seg.amount, 1) }}
+                    className="bracket-card relative bg-cream-surface border border-cream-border rounded-app overflow-hidden shadow-app"
                   >
                     <div
                       className="flex items-baseline justify-between gap-2 px-3 py-2 text-white"
@@ -398,10 +399,15 @@ function TaxCalculator() {
           </div>
         </div>
 
-        {/* Forecast row */}
-        <div className="min-w-0">
-          <ColTitle>Prévision</ColTitle>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <ArrowRight
+          aria-hidden="true"
+          className="text-ink-soft hidden md:block"
+          size={20}
+          strokeWidth={1.75}
+        />
+
+        {/* Right column — forecast */}
+        <div className="min-w-0 flex flex-col gap-3">
             <ResultCard
               label="Net après impôt"
               amount={fmt(net - total)}
@@ -436,10 +442,8 @@ function TaxCalculator() {
                 </>
               }
             />
-          </div>
         </div>
       </div>
-
 
       <div className="mb-6">
         <div className="flex items-center gap-2.5 mb-8">
@@ -462,97 +466,63 @@ function TaxCalculator() {
           </div>
         </div>
 
-        <div className="bg-cream-surface border border-cream-border rounded-app-lg px-6 py-5 mb-6 shadow-app">
-          <div className="flex justify-between items-center mb-2.5 gap-3 flex-wrap">
-            <label
-              className="text-[13px] text-ink-muted font-medium uppercase tracking-[0.04em]"
-              htmlFor="pas-input"
-            >
-              Taux PAS appliqué sur la fiche de paie
-            </label>
-            <div className="inline-flex items-center gap-2.5 bg-cream-alt border border-cream-border rounded-full py-1.5 pl-3.5 pr-1.5">
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium tracking-[0.04em] uppercase text-ink-muted">
-                Taux moyen
-                <InfoIcon>
-                  Impôt total ÷ revenu net imposable, exprimé en %. C'est le
-                  taux que l'administration fiscale utilise par défaut pour
-                  calculer votre prélèvement à la source.
-                </InfoIcon>
-              </span>
-              <span className="text-sm font-semibold tabular-nums text-ink">
-                {avg.toFixed(2)} %
-              </span>
-              <button
-                type="button"
-                onClick={syncPas}
-                className="text-[11px] py-1 px-2.5 rounded-md bg-cream-surface border border-cream-border text-clay cursor-pointer transition-colors hover:bg-clay-soft"
-              >
-                ↻ Synchroniser
-              </button>
-            </div>
+        <div className="mb-6">
+          <div className="flex items-center justify-center gap-1.5 mb-3.5 text-[12px] font-medium tracking-[0.14em] uppercase text-ink-soft">
+            Taux moyen
+            <InfoIcon>
+              Impôt total ÷ revenu net imposable, exprimé en %. C'est le taux
+              que l'administration fiscale utilise par défaut pour calculer
+              votre prélèvement à la source.
+            </InfoIcon>
           </div>
-          <div className="flex items-center gap-3.5 flex-wrap">
-            <input
-              type="number"
-              id="pas-input"
-              value={pas}
-              min={0}
-              max={45}
-              step={0.1}
-              onChange={(e) => setPas(parseFloat(e.target.value) || 0)}
-              className="w-[180px] py-2.5 px-3.5 text-lg font-medium border border-cream-border-strong rounded-app bg-cream-surface text-ink focus:outline-none focus:border-clay focus:shadow-[0_0_0_3px_var(--color-clay-soft)]"
-            />
-            <span className="text-sm text-ink-muted">%</span>
-            <input
-              type="range"
-              min={0}
-              max={45}
-              value={pas}
-              step={0.1}
-              onChange={(e) => setPas(parseFloat(e.target.value) || 0)}
-            />
+          <div className="w-fit mx-auto text-2xl font-medium tabular-nums tracking-[-0.01em] text-ink">
+            {avg.toFixed(2)} %
           </div>
-          <p className="text-xs text-ink-soft m-0 mt-2.5 leading-[1.5]">
-            Par défaut, l'administration utilise votre taux moyen de l'année
-            précédente. Si vos revenus changent, un écart se forme.
-          </p>
         </div>
 
-        <div
-          className={`grid grid-cols-1 md:grid-cols-[minmax(180px,1fr)_2fr] gap-7 items-center bg-cream-surface border border-cream-border border-l-4 rounded-app-lg px-6 py-5 mb-7 shadow-app transition-colors ${regulBorder} ${regulBg}`}
-        >
+        <div className="bg-cream-surface border border-cream-border rounded-app-lg px-6 py-5 shadow-app grid grid-cols-1 md:grid-cols-[minmax(220px,1fr)_2fr] gap-6 items-end">
           <div>
-            <div className="text-xs text-ink-muted uppercase tracking-[0.04em] font-medium mb-1.5">
-              {regulLabel}
+            <label
+              htmlFor="pas-input"
+              className="block mb-2.5 text-[13px] text-ink-muted font-medium uppercase tracking-[0.04em]"
+            >
+              Votre taux actuel
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                id="pas-input"
+                value={pas}
+                min={0}
+                max={45}
+                step={0.1}
+                onChange={(e) => setPas(parseFloat(e.target.value) || 0)}
+                className="w-full py-2.5 pl-3.5 pr-9 text-lg font-medium border border-cream-border-strong rounded-app bg-cream-surface text-ink transition-[border-color,box-shadow] focus:outline-none focus:border-clay focus:shadow-[0_0_0_3px_var(--color-clay-soft)]"
+              />
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-ink-muted pointer-events-none">
+                %
+              </span>
             </div>
-            <div className={`text-[28px] font-medium tracking-[-0.01em] mb-1 ${regulAmountColor}`}>
-              {regulAmount}
-            </div>
-            <div className="text-[13px] text-ink-muted leading-[1.5]">
-              {regulDetail}
-            </div>
+            <button
+              type="button"
+              onClick={resetPas}
+              className="mt-2 text-[11px] text-clay hover:underline cursor-pointer"
+            >
+              ↻ Réinitialiser au taux moyen
+            </button>
           </div>
           <div>
-            <div className="relative h-8 bg-cream-alt rounded-md overflow-hidden mb-2.5">
-              <div
-                className={`absolute top-0 left-0 h-full transition-[width] duration-300 ${regulFillColor}`}
-                style={{ width: barPaidWidth }}
-              />
-              <div
-                className="absolute top-0 h-full bg-[#c0392b]/85 transition-[width] duration-300"
-                style={{ width: barExtraWidth, left: barExtraLeft }}
-              />
+            <div className="text-xs text-ink-muted uppercase tracking-[0.04em] font-medium mb-1.5">
+              {gapLabel}
             </div>
-            <div className="flex gap-4 text-xs text-ink-muted flex-wrap">
-              <span className="inline-flex items-center gap-1.5">
-                <span className={`inline-block w-2.5 h-2.5 rounded-[2px] ${regulDotPaid}`} />
-                Déjà prélevé (PAS)
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block w-2.5 h-2.5 rounded-[2px] bg-ink-soft" />
-                Impôt réel dû
-              </span>
+            <div
+              className={`text-[28px] font-medium tracking-[-0.01em] tabular-nums mb-1 ${gapColor}`}
+            >
+              {gapAmount}
             </div>
+            <p className="text-[13px] text-ink-muted leading-[1.5] m-0">
+              {gapSentence}
+            </p>
           </div>
         </div>
       </div>
