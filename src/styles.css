@@ -31,7 +31,7 @@
 
 @layer base {
   body {
-    @apply bg-cream text-ink m-0 px-4 py-8 font-sans text-[15px] leading-[1.5];
+    @apply bg-cream text-ink font-sans text-[15px] leading-[1.5];
   }
   * {
     box-sizing: border-box;
@@ -64,18 +64,16 @@
     border: 2px solid var(--color-cream-surface);
   }
 
-  /* Info icon tooltip — group-hover/focus pattern needs the inner element */
-  .info-icon {
-    @apply inline-flex items-center justify-center w-4 h-4 rounded-full
-      bg-cream-alt text-ink-muted text-[10px] italic font-semibold cursor-help
-      relative outline-none transition-colors;
-    font-family: Georgia, serif;
+  /* Tooltip — wraps any trigger element, shows bubble on hover/focus */
+  .tooltip {
+    @apply relative inline-flex items-center justify-center text-ink-muted
+      cursor-help outline-none transition-colors;
   }
-  .info-icon:hover,
-  .info-icon:focus {
-    @apply bg-clay text-white;
+  .tooltip:hover,
+  .tooltip:focus {
+    @apply text-clay;
   }
-  .info-tooltip {
+  .tooltip-bubble {
     @apply absolute left-1/2 -translate-x-1/2 bg-[#1a1a1a] text-[#f5f5f0]
       text-[12px] font-normal not-italic leading-[1.5] py-[10px] px-3
       rounded-lg w-[240px] text-left tracking-normal normal-case
@@ -84,7 +82,7 @@
     bottom: calc(100% + 8px);
     font-family: var(--font-sans);
   }
-  .info-tooltip::after {
+  .tooltip-bubble::after {
     content: "";
     position: absolute;
     top: 100%;
@@ -93,8 +91,8 @@
     border: 5px solid transparent;
     border-top-color: #1a1a1a;
   }
-  .info-icon:hover .info-tooltip,
-  .info-icon:focus .info-tooltip {
+  .tooltip:hover .tooltip-bubble,
+  .tooltip:focus .tooltip-bubble {
     @apply opacity-100 visible;
   }
 

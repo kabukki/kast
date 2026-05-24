@@ -40,8 +40,8 @@ const NAV_LINKS = [
 
 function RootComponent() {
   return (
-    <div className="container mx-auto">
-      <header className="grid grid-cols-[1fr_auto_1fr] items-center mb-8">
+    <div className="container mx-auto flex flex-col min-h-dvh">
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center shrink-0 py-4">
         <Link
           to="/"
           aria-label="kast"
@@ -95,7 +95,14 @@ function RootComponent() {
         </button>
       </header>
 
-      <Outlet />
+      <div className="flex-1 flex flex-col min-h-0">
+        <Outlet />
+      </div>
+
+      <footer className="shrink-0 py-6 text-center text-xs text-ink-soft">
+        Estimations à but pédagogique — ne remplacent pas un conseil
+        personnalisé. Données et hypothèses indiquées dans chaque module.
+      </footer>
     </div>
   )
 }
