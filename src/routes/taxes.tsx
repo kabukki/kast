@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import clsx from 'clsx'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Info } from 'lucide-react'
 import {
@@ -143,7 +144,6 @@ type StepId =
   | 'gross'
   | 'status'
   | 'charges'
-  | 'principle'
   | 'brackets'
   | 'net'
   | 'pas'
@@ -153,7 +153,6 @@ const STEP_ORDER: StepId[] = [
   'gross',
   'status',
   'charges',
-  'principle',
   'brackets',
   'net',
   'pas',
@@ -170,6 +169,7 @@ function TaxJourney() {
   const [pas, setPas] = useState<number | null>(null)
   const [pasTouched, setPasTouched] = useState(false)
   const [netPeriod, setNetPeriod] = useState<Period>('month')
+  const [bracketsAnimDone, setBracketsAnimDone] = useState(false)
 
   const [revealed, setRevealed] = useState<Set<StepId>>(
     () => new Set<StepId>(['gross']),
@@ -248,7 +248,7 @@ function TaxJourney() {
   const showSticky = !grossInView && gross !== null && gross > 0
 
   return (
-    <div className="flex-1 flex flex-col items-center py-32 min-h-0 gap-8">
+    <div className="flex-1 flex flex-col items-center pt-32 min-h-0 gap-8">
       <StickyIncomeBar
         show={showSticky}
         gross={gross ?? 0}
@@ -294,22 +294,9 @@ function TaxJourney() {
             <StepCharges gross={gross} status={status} net={net} />
           </Section>
           <StepTransition
-            done={drawing.has('principle')}
+            done={drawing.has('brackets')}
             onAdvance={() => next('charges')}
             label="Découvrir les tranches d'impôt"
-          />
-        </>
-      )}
-
-      {revealed.has('principle') && (
-        <>
-          <Section id="principle" registerRef={registerRef}>
-            <StepPrinciple />
-          </Section>
-          <StepTransition
-            done={drawing.has('brackets')}
-            onAdvance={() => next('principle')}
-            label="Appliquer à mon revenu"
           />
         </>
       )}
@@ -317,13 +304,20 @@ function TaxJourney() {
       {revealed.has('brackets') && (
         <>
           <Section id="brackets" registerRef={registerRef}>
-            <StepBrackets rows={rows} totalTax={totalTax} />
+            <StepBrackets
+              net={net}
+              rows={rows}
+              totalTax={totalTax}
+              onAnimationDone={() => setBracketsAnimDone(true)}
+            />
           </Section>
-          <StepTransition
-            done={drawing.has('net')}
-            onAdvance={() => next('brackets')}
-            label="Voir ce qu'il me reste vraiment"
-          />
+          {bracketsAnimDone && (
+            <StepTransition
+              done={drawing.has('net')}
+              onAdvance={() => next('brackets')}
+              label="Voir ce qu'il me reste vraiment"
+            />
+          )}
         </>
       )}
 
@@ -624,189 +618,255 @@ function StepCharges({
 // Step 4 — The bracket principle
 // ----------------------------------------------------------------------------
 
-function StepPrinciple() {
-  return (
-    <div>
-      <StepHeading
-        title={<>Le principe des tranches</>}
-        subtitle="L'impôt en France est progressif. Votre revenu net imposable est découpé en tranches, et chaque tranche est taxée à un taux différent."
-      />
-
-      <div className="space-y-2.5">
-        {BRACKETS.map((b, i) => {
-          const upper =
-            b.max === Number.POSITIVE_INFINITY
-              ? '∞'
-              : b.max.toLocaleString('fr-FR') + ' €'
-          const lower =
-            (b.min === 0 ? 0 : b.min + 1).toLocaleString('fr-FR') + ' €'
-          return (
-            <motion.div
-              key={b.label}
-              initial={{ opacity: 0, x: -16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{
-                duration: 0.45,
-                delay: 0.1 + i * 0.18,
-                ease: EASE_OUT,
-              }}
-              className="flex items-center gap-4 bg-cream-surface border border-cream-border rounded-app px-4 py-3 shadow-app"
-            >
-              <div
-                className="w-1.5 self-stretch rounded-full shrink-0"
-                style={{ background: b.color }}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="text-[12px] uppercase tracking-[0.08em] text-ink-soft font-medium mb-0.5">
-                  Tranche
-                </div>
-                <div className="text-[14px] tabular-nums text-ink">
-                  {b.min === 0 ? 'Jusqu’à' : 'De'} {lower}
-                  {b.min === 0 ? '' : ' à ' + upper}
-                  {b.max === Number.POSITIVE_INFINITY && b.min > 0
-                    ? ''
-                    : b.min === 0
-                      ? ''
-                      : ''}
-                  {b.max === Number.POSITIVE_INFINITY && b.min > 0
-                    ? ' — au-delà'
-                    : ''}
-                </div>
-              </div>
-              <div
-                className="text-2xl font-medium tabular-nums tracking-[-0.01em] shrink-0"
-                style={{ color: b.color }}
-              >
-                {b.label}
-              </div>
-            </motion.div>
-          )
-        })}
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, delay: 0.1 + BRACKETS.length * 0.18 + 0.1 }}
-        className="mt-6 p-5 bg-clay-soft/50 border-l-4 border-clay rounded-app"
-      >
-        <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-clay mb-1.5">
-          Attention
-        </div>
-        <p className="text-[14px] text-ink leading-[1.55] m-0">
-          Être <strong>« dans la tranche à 30 % »</strong> ne veut pas dire que
-          vous payez 30 % de tout votre revenu. Seuls les euros au-dessus du
-          seuil de <strong>29 315 €</strong> sont taxés à 30 %.
-        </p>
-      </motion.div>
-
-    </div>
-  )
-}
-
 // ----------------------------------------------------------------------------
-// Step 5 — User-specific brackets fill
+// Step 4 — Brackets (combined principle + user fill, with dot animation)
 // ----------------------------------------------------------------------------
 
 type BracketRow = ReturnType<typeof computeBrackets>[number]
 
+const TOTAL_DOTS = 100
+const TOTAL_ANIM_MS = 5000
+const DOT_STAGGER_MS = TOTAL_ANIM_MS / TOTAL_DOTS
+const DOT_FLIGHT_MS = 600
+
 function StepBrackets({
+  net,
   rows,
   totalTax,
+  onAnimationDone,
 }: {
+  net: number
   rows: BracketRow[]
   totalTax: number
+  onAnimationDone: () => void
 }) {
-  const activeRows = rows.filter((r) => r.taxable > 0)
+  // Each dot is assigned to a bracket index according to its proportional
+  // share of the net imposable. We walk brackets bottom-up: fill bracket 0
+  // up to its cumulative dot count, then bracket 1, etc.
+  const dotAssignments = useMemo(() => {
+    if (net <= 0) return []
+    const perDot = net / TOTAL_DOTS
+    const out: number[] = []
+    let remainingForBracket = rows[0]?.taxable ?? 0
+    let bracketIdx = 0
+    for (let i = 0; i < TOTAL_DOTS; i++) {
+      // Move forward until we find a bracket that still has room for this dot.
+      while (
+        bracketIdx < rows.length - 1 &&
+        remainingForBracket < perDot / 2
+      ) {
+        bracketIdx += 1
+        remainingForBracket = rows[bracketIdx].taxable
+      }
+      out.push(bracketIdx)
+      remainingForBracket -= perDot
+    }
+    return out
+  }, [net, rows])
+
+  // Dot count per bracket — derived from the assignments above.
+  const dotsPerBracket = useMemo(() => {
+    const counts = rows.map(() => 0)
+    for (const idx of dotAssignments) counts[idx] += 1
+    return counts
+  }, [dotAssignments, rows])
+
+  // Animated tax counter — incrementing alongside the dot flow.
+  const [animatedTax, setAnimatedTax] = useState(0)
+  const [doneOnce, setDoneOnce] = useState(false)
+  // Per-bracket count of dots already landed. Drives the incremental fill.
+  const [landedPerBracket, setLandedPerBracket] = useState<number[]>(() =>
+    rows.map(() => 0),
+  )
+
+  useEffect(() => {
+    if (dotAssignments.length === 0) {
+      onAnimationDone()
+      return
+    }
+    let cancelled = false
+    let landed = 0
+    let taxAcc = 0
+    const taxPerDot = totalTax / TOTAL_DOTS
+    setAnimatedTax(0)
+    setLandedPerBracket(rows.map(() => 0))
+    const tick = () => {
+      if (cancelled) return
+      const bucket = dotAssignments[landed]
+      landed += 1
+      taxAcc += taxPerDot
+      setAnimatedTax(taxAcc)
+      setLandedPerBracket((prev) => {
+        const copy = prev.slice()
+        copy[bucket] = (copy[bucket] ?? 0) + 1
+        return copy
+      })
+      if (landed < TOTAL_DOTS) {
+        window.setTimeout(tick, DOT_STAGGER_MS)
+      } else {
+        setAnimatedTax(totalTax)
+        if (!doneOnce) {
+          setDoneOnce(true)
+          onAnimationDone()
+        }
+      }
+    }
+    // Start landing after the first dot's flight has begun.
+    const start = window.setTimeout(tick, DOT_FLIGHT_MS)
+    return () => {
+      cancelled = true
+      window.clearTimeout(start)
+    }
+    // Only run the choreography once on mount. Later edits update silently
+    // (see the second effect below that keeps state in sync).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Silent re-sync if user edits gross/status after the animation is done.
+  useEffect(() => {
+    if (doneOnce) {
+      setAnimatedTax(totalTax)
+      setLandedPerBracket(dotsPerBracket)
+    }
+  }, [totalTax, doneOnce, dotsPerBracket])
+
+  const sourceRef = useRef<HTMLDivElement>(null)
+  const bracketRefs = useRef<Array<HTMLDivElement | null>>([])
+
+  // Compute relative offsets (source → each bracket) for the dot flight.
+  const [offsets, setOffsets] = useState<Array<{ dx: number; dy: number }>>([])
+  useEffect(() => {
+    const compute = () => {
+      const src = sourceRef.current?.getBoundingClientRect()
+      if (!src) return
+      const next = bracketRefs.current.map((el) => {
+        if (!el) return { dx: 0, dy: 0 }
+        const r = el.getBoundingClientRect()
+        return {
+          dx: r.left + r.width / 2 - (src.left + src.width / 2),
+          dy: r.top + r.height / 2 - (src.top + src.height / 2),
+        }
+      })
+      setOffsets(next)
+    }
+    compute()
+    window.addEventListener('resize', compute)
+    return () => window.removeEventListener('resize', compute)
+  }, [rows.length])
 
   return (
-    <div>
+    <div className="text-center">
       <StepHeading
-        title={<>Vos tranches à vous</>}
-        subtitle="Votre net imposable vient remplir les tranches l'une après l'autre, du bas vers le haut."
+        title="Les tranches d'imposition"
+        subtitle={
+          <>
+            L'impôt français est <strong>progressif</strong> : votre revenu net
+            imposable est découpé en tranches, et chaque tranche est taxée à
+            son propre taux.
+          </>
+        }
       />
 
-      <div className="space-y-2.5">
+      {/* Source — net imposable at the top */}
+      <div className="flex flex-col items-center mb-12">
+        <div className="text-[11px] font-semibold tracking-[0.14em] uppercase text-ink-soft mb-2">
+          Net imposable
+        </div>
+        <div
+          ref={sourceRef}
+          className="relative text-5xl md:text-6xl font-medium tabular-nums tracking-[-0.02em] text-ink"
+        >
+          <Money value={net} />
+          {/* Dots emitter — overlaid, each dot flies to its bracket */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            {dotAssignments.map((bracketIdx, i) => {
+              const o = offsets[bracketIdx] ?? { dx: 0, dy: 0 }
+              const color = rows[bracketIdx]?.color ?? '#888'
+              return (
+                <motion.span
+                  key={i}
+                  initial={{ x: 0, y: 0, opacity: 0, scale: 0.5 }}
+                  animate={{
+                    x: o.dx,
+                    y: o.dy,
+                    opacity: [0, 1, 1, 0],
+                    scale: [0.5, 1, 1, 0.6],
+                  }}
+                  transition={{
+                    duration: DOT_FLIGHT_MS / 1000,
+                    delay: (i * DOT_STAGGER_MS) / 1000,
+                    ease: EASE_OUT,
+                    times: [0, 0.15, 0.85, 1],
+                  }}
+                  style={{ background: color }}
+                  className="absolute w-2 h-2 rounded-full"
+                />
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Brackets row */}
+      <div className="grid grid-cols-5 gap-2 mb-10">
         {rows.map((r, i) => {
-          const isActive = r.taxable > 0
           const capacity =
             r.max === Number.POSITIVE_INFINITY ? r.taxable : r.max - r.min
-          const fillPct =
+          const finalFillPct =
             capacity > 0 ? Math.min(100, (r.taxable / capacity) * 100) : 0
-
+          const target = dotsPerBracket[i] ?? 0
+          const landed = landedPerBracket[i] ?? 0
+          const liveFillPct =
+            target > 0 ? (landed / target) * finalFillPct : 0
+          const isActive = r.taxable > 0
           return (
-            <motion.div
+            <div
               key={r.label}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{
-                opacity: isActive ? 1 : 0.45,
-                y: 0,
+              ref={(el) => {
+                bracketRefs.current[i] = el
               }}
-              transition={{
-                duration: 0.4,
-                delay: 0.15 + i * 0.2,
-              }}
-              className="relative bg-cream-surface border border-cream-border rounded-app overflow-hidden shadow-app"
+              className={clsx(
+                'flex flex-col items-stretch bg-cream-surface border border-cream-border rounded-app overflow-hidden shadow-app transition-opacity',
+                !isActive && 'opacity-40',
+              )}
             >
-              {/* Fill bar */}
-              <div className="relative h-12 bg-cream-alt overflow-hidden">
+              {/* Bucket fill */}
+              <div className="relative h-32 bg-cream-alt overflow-hidden flex items-end">
                 <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${fillPct}%` }}
-                  transition={{
-                    duration: 0.7,
-                    delay: 0.3 + i * 0.2,
-                    ease: EASE_OUT,
-                  }}
-                  className="h-full"
+                  initial={false}
+                  animate={{ height: `${liveFillPct}%` }}
+                  transition={{ duration: DOT_STAGGER_MS / 1000, ease: 'linear' }}
+                  className="absolute inset-x-0 bottom-0"
                   style={{ background: r.color }}
                 />
-                <div className="absolute inset-0 flex items-center justify-between px-3.5 pointer-events-none">
-                  <span className="text-[12px] font-semibold tracking-[0.04em] uppercase text-ink mix-blend-multiply">
-                    Tranche {r.label}
-                  </span>
-                  {isActive && (
-                    <motion.span
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.7 + i * 0.2 }}
-                      className="text-[13px] font-medium tabular-nums text-ink mix-blend-multiply"
-                    >
-                      {fmt(r.taxable)}
-                    </motion.span>
-                  )}
-                </div>
-              </div>
-              {isActive && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.8 + i * 0.2, duration: 0.3 }}
-                  className="flex items-center justify-between px-3.5 py-2 text-[12px] border-t border-cream-border bg-cream-surface"
+                <span
+                  className="relative w-full text-center text-[13px] font-semibold tabular-nums text-ink mix-blend-multiply pb-2"
+                  style={{ color: r.color }}
                 >
-                  <span className="text-ink-muted">
-                    {fmt(r.taxable)} × {r.label}
-                  </span>
-                  <span className="text-rust font-medium tabular-nums">
+                  {r.label}
+                </span>
+              </div>
+              {/* Footer */}
+              <div className="px-2 py-2 border-t border-cream-border text-center">
+                {isActive && (
+                  <div className="text-[12px] tabular-nums text-ink font-medium">
+                    {fmt(r.taxable)}
+                  </div>
+                )}
+                {isActive && r.tax > 0 && (
+                  <div className="text-[11px] tabular-nums text-rust">
                     + {fmt(r.tax)} d'impôt
-                  </span>
-                </motion.div>
-              )}
-            </motion.div>
+                  </div>
+                )}
+              </div>
+            </div>
           )
         })}
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{
-          duration: 0.45,
-          delay: 0.3 + activeRows.length * 0.2 + 0.4,
-        }}
-        className="mt-6 flex items-center justify-between bg-ink text-cream rounded-app-lg px-6 py-5 shadow-app"
-      >
-        <div>
+      {/* Live counter */}
+      <div className="flex items-center justify-between bg-ink text-cream rounded-app-lg px-6 py-5 shadow-app">
+        <div className="text-left">
           <div className="text-[11px] font-semibold tracking-[0.14em] uppercase text-cream/70 mb-1">
             Total à payer
           </div>
@@ -815,10 +875,9 @@ function StepBrackets({
           </div>
         </div>
         <div className="text-3xl font-medium tabular-nums tracking-[-0.01em] text-cream">
-          <Money value={totalTax} />
+          <Money value={animatedTax} />
         </div>
-      </motion.div>
-
+      </div>
     </div>
   )
 }
@@ -846,7 +905,7 @@ function StepNet({
   return (
     <div>
       <StepHeading
-        title={<>Ce qu'il vous reste vraiment</>}
+        title="Sur votre compte"
         subtitle="Après les charges sociales et l'impôt sur le revenu, voici ce que vous gardez réellement."
       />
 

@@ -40,8 +40,8 @@ const NAV_LINKS = [
 
 function RootComponent() {
   return (
-    <div className="container mx-auto flex flex-col min-h-dvh">
-      <header className="grid grid-cols-[1fr_auto_1fr] items-center shrink-0 py-4">
+    <div className="container mx-auto flex flex-col min-h-dvh p-4">
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center shrink-0">
         <Link
           to="/"
           aria-label="kast"
