@@ -41,16 +41,16 @@ type Bracket = {
 }
 
 const BRACKETS: ReadonlyArray<Bracket> = [
-  { rate: 0, min: 0, max: 11497, label: '0 %', color: '#a8a59a' },
-  { rate: 0.11, min: 11497, max: 29315, label: '11 %', color: '#5b9bd5' },
-  { rate: 0.3, min: 29315, max: 83823, label: '30 %', color: '#48a584' },
-  { rate: 0.41, min: 83823, max: 180294, label: '41 %', color: '#d99342' },
+  { rate: 0, min: 0, max: 11497, label: '0 %', color: '#6f8b6e' },
+  { rate: 0.11, min: 11497, max: 29315, label: '11 %', color: '#b5b265' },
+  { rate: 0.3, min: 29315, max: 83823, label: '30 %', color: '#d9a05b' },
+  { rate: 0.41, min: 83823, max: 180294, label: '41 %', color: '#c97a45' },
   {
     rate: 0.45,
     min: 180294,
     max: Number.POSITIVE_INFINITY,
     label: '45 %',
-    color: '#c96442',
+    color: '#b04a3a',
   },
 ]
 
@@ -504,7 +504,7 @@ function StepCharges({
   return (
     <div>
       <StepHeading
-        title={<>Du brut au net imposable</>}
+        title="Le net imposable"
         subtitle={
           <>
             Du brut, on retire d'abord les charges sociales. Pour un{' '}
@@ -678,18 +678,26 @@ function StepBrackets({
   const [landedPerBracket, setLandedPerBracket] = useState<number[]>(() =>
     rows.map(() => 0),
   )
+  // Bumped on every (re)play — forces the dot motion components to remount
+  // so their initial → animate transition replays from scratch.
+  const [playKey, setPlayKey] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const cancelRef = useRef<(() => void) | null>(null)
 
-  useEffect(() => {
+  const play = useCallback(() => {
+    cancelRef.current?.()
     if (dotAssignments.length === 0) {
       onAnimationDone()
       return
     }
+    setPlayKey((k) => k + 1)
+    setPlaying(true)
+    setAnimatedTax(0)
+    setLandedPerBracket(rows.map(() => 0))
     let cancelled = false
     let landed = 0
     let taxAcc = 0
     const taxPerDot = totalTax / TOTAL_DOTS
-    setAnimatedTax(0)
-    setLandedPerBracket(rows.map(() => 0))
     const tick = () => {
       if (cancelled) return
       const bucket = dotAssignments[landed]
@@ -705,30 +713,34 @@ function StepBrackets({
         window.setTimeout(tick, DOT_STAGGER_MS)
       } else {
         setAnimatedTax(totalTax)
+        setPlaying(false)
         if (!doneOnce) {
           setDoneOnce(true)
           onAnimationDone()
         }
       }
     }
-    // Start landing after the first dot's flight has begun.
     const start = window.setTimeout(tick, DOT_FLIGHT_MS)
-    return () => {
+    cancelRef.current = () => {
       cancelled = true
       window.clearTimeout(start)
     }
-    // Only run the choreography once on mount. Later edits update silently
-    // (see the second effect below that keeps state in sync).
+  }, [dotAssignments, rows, totalTax, doneOnce, onAnimationDone])
+
+  // Run once on mount.
+  useEffect(() => {
+    play()
+    return () => cancelRef.current?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Silent re-sync if user edits gross/status after the animation is done.
   useEffect(() => {
-    if (doneOnce) {
+    if (doneOnce && !playing) {
       setAnimatedTax(totalTax)
       setLandedPerBracket(dotsPerBracket)
     }
-  }, [totalTax, doneOnce, dotsPerBracket])
+  }, [totalTax, doneOnce, dotsPerBracket, playing])
 
   const sourceRef = useRef<HTMLDivElement>(null)
   const bracketRefs = useRef<Array<HTMLDivElement | null>>([])
@@ -784,7 +796,7 @@ function StepBrackets({
               const color = rows[bracketIdx]?.color ?? '#888'
               return (
                 <motion.span
-                  key={i}
+                  key={`${playKey}:${i}`}
                   initial={{ x: 0, y: 0, opacity: 0, scale: 0.5 }}
                   animate={{
                     x: o.dx,
@@ -874,8 +886,18 @@ function StepBrackets({
             Somme des impôts dus dans chaque tranche.
           </div>
         </div>
-        <div className="text-3xl font-medium tabular-nums tracking-[-0.01em] text-cream">
-          <Money value={animatedTax} />
+        <div className="flex items-center gap-4">
+          <div className="text-3xl font-medium tabular-nums tracking-[-0.01em] text-cream">
+            <Money value={animatedTax} />
+          </div>
+          <button
+            type="button"
+            onClick={play}
+            disabled={playing}
+            className="text-xl text-cream/70 hover:text-cream disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+          >
+            ↻
+          </button>
         </div>
       </div>
     </div>
