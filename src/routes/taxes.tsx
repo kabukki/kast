@@ -2,15 +2,13 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Info } from 'lucide-react'
+import { ArrowRight, Info, RotateCcw } from 'lucide-react'
 import {
-  Connector,
+  Button,
   Money,
   Percent,
   Picker,
-  Section,
   StepHeading,
-  StepTransition,
   Tooltip,
 } from '../components'
 
@@ -169,53 +167,10 @@ function TaxJourney() {
   const [pas, setPas] = useState<number | null>(null)
   const [pasTouched, setPasTouched] = useState(false)
   const [netPeriod, setNetPeriod] = useState<Period>('month')
-  const [bracketsAnimDone, setBracketsAnimDone] = useState(false)
 
-  const [revealed, setRevealed] = useState<Set<StepId>>(
-    () => new Set<StepId>(['gross']),
-  )
-  // Sections whose connector is currently drawing (= they will mount after
-  // the connector animation completes). Drives Connector show prop separately
-  // from the actual section mount, so we don't get a layout jump.
-  const [drawing, setDrawing] = useState<Set<StepId>>(() => new Set())
-
-  const [grossInView, setGrossInView] = useState(true)
-
-  const sectionRefs = useRef<Partial<Record<string, HTMLElement | null>>>({})
-  const registerRef = useCallback((id: string, el: HTMLElement | null) => {
-    sectionRefs.current[id] = el
-  }, [])
-
-  const CONNECTOR_DURATION_MS = 1200
-
-  const advancedSteps = useRef<Set<StepId>>(new Set())
-
-  const advanceTo = useCallback((next: StepId) => {
-    // First-time only: subsequent calls (e.g. re-editing status from the
-    // sticky bar) must not retrigger the draw + scroll choreography.
-    if (advancedSteps.current.has(next)) return
-    advancedSteps.current.add(next)
-
-    setDrawing((prev) => {
-      const copy = new Set(prev)
-      copy.add(next)
-      return copy
-    })
-
-    window.setTimeout(() => {
-      setRevealed((prev) => {
-        const copy = new Set(prev)
-        copy.add(next)
-        return copy
-      })
-      requestAnimationFrame(() => {
-        sectionRefs.current[next]?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-        })
-      })
-    }, CONNECTOR_DURATION_MS)
-  }, [])
+  const [stepIndex, setStepIndex] = useState(0)
+  const [direction, setDirection] = useState<1 | -1>(1)
+  const currentStep = STEP_ORDER[stepIndex]
 
   // Derived values — recompute on every change in any upstream input.
   const deduction = status ? STATUS_DEDUCTION[status] : 0
@@ -236,113 +191,68 @@ function TaxJourney() {
     if (!pasTouched) setPas(defaultPas(net))
   }, [net, pasTouched])
 
-  const next = useCallback(
-    (id: StepId) => {
-      const idx = STEP_ORDER.indexOf(id)
-      if (idx < 0 || idx === STEP_ORDER.length - 1) return
-      advanceTo(STEP_ORDER[idx + 1])
-    },
-    [advanceTo],
-  )
+  const goNext = useCallback(() => {
+    setDirection(1)
+    setStepIndex((i) => Math.min(STEP_ORDER.length - 1, i + 1))
+  }, [])
 
-  const showSticky = !grossInView && gross !== null && gross > 0
+  const reset = useCallback(() => {
+    setGross(null)
+    setStatus(null)
+    setPas(null)
+    setPasTouched(false)
+    setNetPeriod('month')
+    setDirection(-1)
+    setStepIndex(0)
+  }, [])
 
   return (
-    <div className="flex-1 flex flex-col items-center pt-32 min-h-0 gap-8">
-      <StickyIncomeBar
-        show={showSticky}
-        gross={gross ?? 0}
-        status={status}
-        onGrossChange={setGross}
-        onStatusChange={setStatus}
-      />
-
-      <Section
-        id="gross"
-        registerRef={registerRef}
-        onViewportEnter={() => setGrossInView(true)}
-        onViewportLeave={() => setGrossInView(false)}
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={currentStep}
+        initial={{ opacity: 0, x: direction * 48 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: direction * -48 }}
+        transition={{ duration: 0.4, ease: EASE_OUT }}
+        className="flex-1 flex items-center justify-center w-full max-w-3xl mx-auto"
       >
-        <StepGross gross={gross} onChange={setGross} />
-      </Section>
-      {gross !== null && gross > 0 && (
-        <StepTransition
-          done={drawing.has('status')}
-          onAdvance={() => next('gross')}
-          label="Commencer"
-        />
-      )}
-
-      {revealed.has('status') && (
-        <>
-          <Section id="status" registerRef={registerRef}>
+          {currentStep === 'gross' && (
+            <StepGross gross={gross} onChange={setGross} onNext={goNext} />
+          )}
+          {currentStep === 'status' && (
             <StepStatus
               status={status}
-              onChange={(s) => {
-                setStatus(s)
-                next('status')
-              }}
+              onChange={setStatus}
+              onNext={goNext}
             />
-          </Section>
-          <Connector show={drawing.has('charges')} />
-        </>
-      )}
-
-      {revealed.has('charges') && gross !== null && status !== null && (
-        <>
-          <Section id="charges" registerRef={registerRef}>
-            <StepCharges gross={gross} status={status} net={net} />
-          </Section>
-          <StepTransition
-            done={drawing.has('brackets')}
-            onAdvance={() => next('charges')}
-            label="Découvrir les tranches d'impôt"
-          />
-        </>
-      )}
-
-      {revealed.has('brackets') && (
-        <>
-          <Section id="brackets" registerRef={registerRef}>
+          )}
+          {currentStep === 'charges' && gross !== null && status !== null && (
+            <StepCharges
+              gross={gross}
+              status={status}
+              net={net}
+              onNext={goNext}
+            />
+          )}
+          {currentStep === 'brackets' && (
             <StepBrackets
               net={net}
               rows={rows}
               totalTax={totalTax}
-              onAnimationDone={() => setBracketsAnimDone(true)}
-            />
-          </Section>
-          {bracketsAnimDone && (
-            <StepTransition
-              done={drawing.has('net')}
-              onAdvance={() => next('brackets')}
-              label="Voir ce qu'il me reste vraiment"
+              onNext={goNext}
             />
           )}
-        </>
-      )}
-
-      {revealed.has('net') && (
-        <>
-          <Section id="net" registerRef={registerRef}>
+          {currentStep === 'net' && (
             <StepNet
               netAfterTax={netAfterTax}
               avgRate={avgRate}
               margRate={margRate}
               netPeriod={netPeriod}
               onPeriodChange={setNetPeriod}
+              onNext={goNext}
             />
-          </Section>
-          <StepTransition
-            done={drawing.has('pas')}
-            onAdvance={() => next('net')}
-            label="Et le prélèvement à la source ?"
-          />
-        </>
-      )}
-
-      {revealed.has('pas') && (
-        <>
-          <Section id="pas" registerRef={registerRef}>
+          )}
+          {currentStep === 'pas' && (
             <StepPas
               avgRate={avgRate}
               pas={effectivePas}
@@ -356,23 +266,14 @@ function TaxJourney() {
                 setPasTouched(false)
                 setPas(defaultPas(net))
               }}
+              onNext={goNext}
             />
-          </Section>
-          <StepTransition
-            done={drawing.has('power')}
-            onAdvance={() => next('pas')}
-            label="Comprendre mon pouvoir d'achat"
-          />
-        </>
-      )}
-
-      {revealed.has('power') && (
-        <Section id="power" registerRef={registerRef}>
-          <StepPower netAfterTax={netAfterTax} />
-        </Section>
-      )}
-
-    </div>
+          )}
+        {currentStep === 'power' && (
+          <StepPower netAfterTax={netAfterTax} onReset={reset} />
+        )}
+      </motion.div>
+    </AnimatePresence>
   )
 }
 
@@ -383,16 +284,19 @@ function TaxJourney() {
 function StepGross({
   gross,
   onChange,
+  onNext,
 }: {
   gross: number | null
   onChange: (n: number) => void
+  onNext: () => void
 }) {
   const displayValue = gross === null ? '' : String(Math.round(gross))
+  const canAdvance = gross !== null && gross > 0
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center">
+    <div className="flex flex-col items-center justify-center text-center">
       <h1 className="font-display text-[36px] md:text-[48px] leading-[1.05] font-semibold tracking-[-0.02em] text-ink m-0 mb-3">
-        Combien gagnez-vous brut par&nbsp;an&nbsp;?
+        Quel est votre salaire annuel brut&nbsp;?
       </h1>
       <p className="text-ink-muted text-[15px] md:text-[16px] m-0 mb-10">
         Tout commence par votre salaire affiché sur votre contrat, avant
@@ -412,6 +316,9 @@ function StepGross({
             const parsed = parseFloat(e.target.value)
             onChange(Number.isNaN(parsed) ? 0 : parsed)
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && canAdvance) onNext()
+          }}
           className="w-full py-5 pl-6 pr-14 text-3xl md:text-4xl font-medium text-center border border-cream-border-strong rounded-app-lg bg-cream-surface text-ink tabular-nums transition-[border-color,box-shadow] focus:outline-none focus:border-clay focus:shadow-[0_0_0_3px_var(--color-clay-soft)] placeholder:text-ink-soft/60 placeholder:font-normal"
         />
         <span className="absolute right-6 top-1/2 -translate-y-1/2 text-2xl text-ink-muted pointer-events-none">
@@ -419,6 +326,16 @@ function StepGross({
         </span>
       </div>
 
+      <div className="mt-10">
+        <Button
+          icon={ArrowRight}
+          onClick={onNext}
+          disabled={!canAdvance}
+          className="disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Commencer
+        </Button>
+      </div>
     </div>
   )
 }
@@ -430,12 +347,14 @@ function StepGross({
 function StepStatus({
   status,
   onChange,
+  onNext,
 }: {
   status: Status | null
   onChange: (s: Status) => void
+  onNext: () => void
 }) {
   return (
-    <div>
+    <div className="flex flex-col items-center">
       <StepHeading
         title={<>Très bien. Quel est votre statut&nbsp;?</>}
         subtitle="Les charges sociales retirées de votre brut dépendent de votre statut. C'est la première chose à connaître pour calculer ce que vous gardez vraiment."
@@ -444,7 +363,7 @@ function StepStatus({
       <div
         role="radiogroup"
         aria-label="Statut"
-        className="grid grid-cols-2 md:grid-cols-4 gap-3"
+        className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full"
       >
         {(['public', 'etam', 'cadre', 'liberal'] as Status[]).map((s) => {
           const active = status === s
@@ -461,24 +380,26 @@ function StepStatus({
                   : 'bg-cream-surface border-cream-border hover:border-cream-border-strong'
               }`}
             >
-              <div className="flex items-baseline justify-between mb-1.5">
-                <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
-                  {STATUS_LABEL[s]}
-                </span>
-                <span
-                  className={`text-[11px] font-medium tabular-nums ${
-                    active ? 'text-clay' : 'text-ink-soft'
-                  }`}
-                >
-                  −{Math.round(STATUS_DEDUCTION[s] * 100)} %
-                </span>
-              </div>
+              <span className="block text-[15px] font-semibold tracking-[-0.01em] text-ink mb-1.5">
+                {STATUS_LABEL[s]}
+              </span>
               <p className="text-[12px] text-ink-muted leading-[1.4] m-0">
                 {STATUS_TAGLINE[s]}
               </p>
             </button>
           )
         })}
+      </div>
+
+      <div className="mt-10">
+        <Button
+          icon={ArrowRight}
+          onClick={onNext}
+          disabled={status === null}
+          className="disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Suivant
+        </Button>
       </div>
     </div>
   )
@@ -492,10 +413,12 @@ function StepCharges({
   gross,
   status,
   net,
+  onNext,
 }: {
   gross: number
   status: Status
   net: number
+  onNext: () => void
 }) {
   const charges = STATUS_CHARGES[status]
   const totalDeduction = STATUS_DEDUCTION[status]
@@ -504,7 +427,7 @@ function StepCharges({
   return (
     <div>
       <StepHeading
-        title="Le net imposable"
+        title="Votre net imposable"
         subtitle={
           <>
             Du brut, on retire d'abord les charges sociales. Pour un{' '}
@@ -610,6 +533,11 @@ function StepCharges({
         </motion.div>
       </div>
 
+      <div className="mt-10 flex justify-center">
+        <Button icon={ArrowRight} onClick={onNext}>
+          Suivant
+        </Button>
+      </div>
     </div>
   )
 }
@@ -633,12 +561,12 @@ function StepBrackets({
   net,
   rows,
   totalTax,
-  onAnimationDone,
+  onNext,
 }: {
   net: number
   rows: BracketRow[]
   totalTax: number
-  onAnimationDone: () => void
+  onNext: () => void
 }) {
   // Each dot is assigned to a bracket index according to its proportional
   // share of the net imposable. We walk brackets bottom-up: fill bracket 0
@@ -686,10 +614,7 @@ function StepBrackets({
 
   const play = useCallback(() => {
     cancelRef.current?.()
-    if (dotAssignments.length === 0) {
-      onAnimationDone()
-      return
-    }
+    if (dotAssignments.length === 0) return
     setPlayKey((k) => k + 1)
     setPlaying(true)
     setAnimatedTax(0)
@@ -714,10 +639,7 @@ function StepBrackets({
       } else {
         setAnimatedTax(totalTax)
         setPlaying(false)
-        if (!doneOnce) {
-          setDoneOnce(true)
-          onAnimationDone()
-        }
+        if (!doneOnce) setDoneOnce(true)
       }
     }
     const start = window.setTimeout(tick, DOT_FLIGHT_MS)
@@ -725,7 +647,7 @@ function StepBrackets({
       cancelled = true
       window.clearTimeout(start)
     }
-  }, [dotAssignments, rows, totalTax, doneOnce, onAnimationDone])
+  }, [dotAssignments, rows, totalTax, doneOnce])
 
   // Run once on mount.
   useEffect(() => {
@@ -769,7 +691,7 @@ function StepBrackets({
   return (
     <div className="text-center">
       <StepHeading
-        title="Les tranches d'imposition"
+        title="Votre impôt sur le revenu"
         subtitle={
           <>
             L'impôt français est <strong>progressif</strong> : votre revenu net
@@ -780,13 +702,9 @@ function StepBrackets({
       />
 
       {/* Source — net imposable at the top */}
-      <div className="flex flex-col items-center mb-12">
-        <div className="text-[11px] font-semibold tracking-[0.14em] uppercase text-ink-soft mb-2">
-          Net imposable
-        </div>
         <div
           ref={sourceRef}
-          className="relative text-5xl md:text-6xl font-medium tabular-nums tracking-[-0.02em] text-ink"
+          className="mb-8 relative text-5xl md:text-6xl font-medium tabular-nums tracking-[-0.02em] text-ink"
         >
           <Money value={net} />
           {/* Dots emitter — overlaid, each dot flies to its bracket */}
@@ -817,7 +735,6 @@ function StepBrackets({
             })}
           </div>
         </div>
-      </div>
 
       {/* Brackets row */}
       <div className="grid grid-cols-5 gap-2 mb-10">
@@ -900,6 +817,12 @@ function StepBrackets({
           </button>
         </div>
       </div>
+
+      <div className="mt-10 flex justify-center">
+        <Button icon={ArrowRight} onClick={onNext}>
+          Suivant
+        </Button>
+      </div>
     </div>
   )
 }
@@ -914,12 +837,14 @@ function StepNet({
   margRate,
   netPeriod,
   onPeriodChange,
+  onNext,
 }: {
   netAfterTax: number
   avgRate: number
   margRate: number
   netPeriod: Period
   onPeriodChange: (p: Period) => void
+  onNext: () => void
 }) {
   const shown =
     netPeriod === 'month' ? netAfterTax / 12 : netAfterTax
@@ -981,6 +906,11 @@ function StepNet({
         />
       </div>
 
+      <div className="mt-10 flex justify-center">
+        <Button icon={ArrowRight} onClick={onNext}>
+          Suivant
+        </Button>
+      </div>
     </div>
   )
 }
@@ -996,6 +926,7 @@ function StepPas({
   diff,
   onChangePas,
   onReset,
+  onNext,
 }: {
   avgRate: number
   pas: number
@@ -1003,6 +934,7 @@ function StepPas({
   diff: number
   onChangePas: (n: number) => void
   onReset: () => void
+  onNext: () => void
 }) {
   let gapTone: 'balanced' | 'refund' | 'due' = 'balanced'
   let gapLabel = 'Solde équilibré'
@@ -1122,6 +1054,11 @@ function StepPas({
         </p>
       </motion.div>
 
+      <div className="mt-10 flex justify-center">
+        <Button icon={ArrowRight} onClick={onNext}>
+          Suivant
+        </Button>
+      </div>
     </div>
   )
 }
@@ -1130,7 +1067,13 @@ function StepPas({
 // Step 8 — Purchasing power
 // ----------------------------------------------------------------------------
 
-function StepPower({ netAfterTax }: { netAfterTax: number }) {
+function StepPower({
+  netAfterTax,
+  onReset,
+}: {
+  netAfterTax: number
+  onReset: () => void
+}) {
   const monthly = netAfterTax / 12
 
   return (
@@ -1178,6 +1121,12 @@ function StepPower({ netAfterTax }: { netAfterTax: number }) {
           }
         />
       </div>
+
+      <div className="mt-10 flex justify-center">
+        <Button icon={RotateCcw} onClick={onReset}>
+          Recommencer
+        </Button>
+      </div>
     </div>
   )
 }
@@ -1185,89 +1134,6 @@ function StepPower({ netAfterTax }: { netAfterTax: number }) {
 // ----------------------------------------------------------------------------
 // Shared small components
 // ----------------------------------------------------------------------------
-
-function StickyIncomeBar({
-  show,
-  gross,
-  status,
-  onGrossChange,
-  onStatusChange,
-}: {
-  show: boolean
-  gross: number
-  status: Status | null
-  onGrossChange: (n: number) => void
-  onStatusChange: (s: Status) => void
-}) {
-  return (
-    <AnimatePresence>
-      {show && (
-        <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.3, ease: 'easeOut' }}
-          className="sticky top-2 z-40 mb-6"
-        >
-          <div className="mx-auto flex items-center gap-3 md:gap-4 bg-cream-surface/95 backdrop-blur border border-cream-border-strong shadow-app rounded-full pl-4 pr-1.5 py-1.5">
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-ink-soft hidden sm:inline">
-                Brut
-              </span>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={Math.round(gross)}
-                  min={0}
-                  step={1000}
-                  onChange={(e) =>
-                    onGrossChange(parseFloat(e.target.value) || 0)
-                  }
-                  aria-label="Revenu annuel brut"
-                  className="w-27.5 py-1 pl-2 pr-5 text-[14px] font-medium tabular-nums text-ink bg-transparent border-0 focus:outline-none focus:ring-0"
-                />
-                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[12px] text-ink-soft pointer-events-none">
-                  €
-                </span>
-              </div>
-            </div>
-
-            <div
-              aria-hidden="true"
-              className="w-px h-5 bg-cream-border-strong shrink-0"
-            />
-
-            <div
-              role="radiogroup"
-              aria-label="Statut"
-              className="flex items-center gap-0.5 bg-cream-alt rounded-full p-0.5"
-            >
-              {(['public', 'etam', 'cadre', 'liberal'] as Status[]).map((s) => {
-                const active = status === s
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => onStatusChange(s)}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-medium tracking-[0.04em] transition-colors cursor-pointer ${
-                      active
-                        ? 'bg-cream-surface text-ink shadow-app'
-                        : 'text-ink-muted hover:text-ink'
-                    }`}
-                  >
-                    {STATUS_LABEL[s]}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
 
 function ResultCard({
   label,
