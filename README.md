@@ -1,14 +1,6 @@
-# 🔮 kash
+# 💸 Kash
 
 Demystifying personal finance
-
-## Develop
-
-```sh
-npm install
-npm run dev
-npm run deploy
-```
 
 ## Credits
 
