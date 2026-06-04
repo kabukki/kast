@@ -4,7 +4,7 @@ import { HeartPulse } from 'lucide-react'
 export const Route = createFileRoute('/health')({
   component: HealthPage,
   head: () => ({
-    meta: [{ title: 'Santé — kast' }],
+    meta: [{ title: 'Santé — kash' }],
   }),
 })
 

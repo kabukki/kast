@@ -1,13 +1,13 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "kast",
+  "name": "kash",
   "compatibility_date": "2026-05-16",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
   "workers_dev": false,
   "preview_urls": false,
   "routes": [
-    { "pattern": "kast.le-roux.dev", "custom_domain": true }
+    { "pattern": "kash.le-roux.dev", "custom_domain": true }
   ],
   "observability": {
     "enabled": true

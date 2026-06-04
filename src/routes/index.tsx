@@ -4,7 +4,7 @@ import { Calculator, HeartPulse } from 'lucide-react'
 export const Route = createFileRoute('/')({
   component: Landing,
   head: () => ({
-    meta: [{ title: 'kast — Outils financiers' }],
+    meta: [{ title: 'kash — Outils financiers' }],
   }),
 })
 

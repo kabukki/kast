@@ -1,4 +1,4 @@
-# 🔮 kast
+# 🔮 kash
 
 Demystifying personal finance
 

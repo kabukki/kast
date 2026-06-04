@@ -13,7 +13,7 @@ export const Route = createRootRoute({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'kast — Outils financiers' },
+      { title: 'kash — Outils financiers' },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
@@ -44,11 +44,11 @@ function RootComponent() {
       <header className="grid grid-cols-[1fr_auto_1fr] items-center shrink-0">
         <Link
           to="/"
-          aria-label="kast"
+          aria-label="kash"
           className="inline-flex items-baseline text-clay hover:opacity-80 transition-opacity no-underline justify-self-start"
         >
           <span className="font-display text-[34px] leading-none font-semibold tracking-[-0.04em] lowercase">
-            kast
+            kash
           </span>
           <span
             aria-hidden="true"

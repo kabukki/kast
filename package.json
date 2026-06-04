@@ -1,11 +1,12 @@
 {
-  "name": "kast",
+  "name": "kash",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "vite dev",
     "build": "vite build",
-    "deploy": "npm run build && wrangler deploy"
+    "predeploy": "npm run build",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@number-flow/react": "^0.6.0",
